@@ -1,0 +1,39 @@
+# Terraform
+
+*.tfstate*
+.terraform/
+
+# Kubernetes
+
+kubeconfig*
+*.kubeconfig
+
+# Environment files
+
+.env*
+*.env
+
+# Logs
+
+*.log
+
+# OS files
+
+.DS_Store
+
+# Editors
+
+.idea/
+.vscode/
+*.swp
+
+# Helm
+
+*.tgz
+
+# Misc
+
+coverage/
+dist/
+tmp/
+
