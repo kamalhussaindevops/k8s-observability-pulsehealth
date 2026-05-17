@@ -9,7 +9,7 @@ Status: in progress (Day 1 of 21)
 
 # Problem Statement
 
-PulseHealth is a growing healthcare SaaS company experiencing increasing operational instability as platform traffic scales. The operations team currently receives 40+ alerts per week, many of them caused by short-lived infrastructure spikes that resolve before engineers can investigate.
+PulseHealth is a growing healthcare SaaS company experiencing increasing operational instability as platform traffic scales. The operations team currently receives 40+ pages a week, half of them at 3am for issues that resolve themselves before anyone can investigate.
 
 More critically, the platform lacks reliable user-centric observability. During a recent production incident, degraded API response performance went undetected internally for 17 minutes until multiple customer support reports were received.
 
@@ -40,18 +40,20 @@ The implementation will focus on:
 
 # Architecture
 
----
+Coming in Week 1 — initial system architecture and deployment flow.
 
 # SLOs
 
----
+Coming in Week 2 — initial SLO definitions, SLIs, and error-budget strategy.
 
 # Dashboards
 
----
+Coming in Week 2 — Grafana dashboard structure and key service views.
 
 # Runbooks
 
----
+Coming in Week 3 — incident response runbooks for common failure modes.
 
 # How to Deploy
+
+Coming in Week 1 — local KIND deployment first, then AWS EKS deployment path.
