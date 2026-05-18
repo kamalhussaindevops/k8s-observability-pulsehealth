@@ -1,3 +1,15 @@
+# Exclude node-exporter from kind's control-plane node.
+# kind control-plane has known issues with hostPort node-exporter;
+# this restriction is not needed on real cloud Kubernetes (EKS/AKS/GKE).
+prometheus-node-exporter:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node-role.kubernetes.io/control-plane
+            operator: DoesNotExist
+
 # Pin observability components to the platform-tier node
 prometheus:
   prometheusSpec:
