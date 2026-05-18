@@ -1,0 +1,29 @@
+# Pin observability components to the platform-tier node
+prometheus:
+  prometheusSpec:
+    nodeSelector:
+      workload-tier: platform
+    retention: 24h
+    resources:
+      requests:
+        memory: 1Gi
+        cpu: 100m
+      limits:
+        memory: 2Gi
+
+alertmanager:
+  alertmanagerSpec:
+    nodeSelector:
+      workload-tier: platform
+
+grafana:
+  nodeSelector:
+    workload-tier: platform
+  # Local dev password only; we change this on EKS
+  adminPassword: admin
+  service:
+    type: ClusterIP
+
+prometheusOperator:
+  nodeSelector:
+    workload-tier: platform
