@@ -1,0 +1,30 @@
+controller:
+  # Pin to the kind control-plane node (which has ingress-ready=true label and
+  # port 80/443 mapped to the host in kind/cluster-config.yaml)
+  nodeSelector:
+    ingress-ready: "true"
+
+  # Tolerate control-plane taint so the pod can land there
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Equal"
+      effect: "NoSchedule"
+
+  # DaemonSet so it can bind host ports 80/443
+  kind: DaemonSet
+  hostPort:
+    enabled: true
+
+  # ClusterIP service since we use hostPort directly
+  service:
+    type: ClusterIP
+
+  # CRITICAL: enable Prometheus metrics + ServiceMonitor
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      namespace: monitoring
+      # Must match the label kube-prometheus-stack uses to find ServiceMonitors
+      additionalLabels:
+        release: kube-prometheus-stack
