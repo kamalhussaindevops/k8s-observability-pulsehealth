@@ -1,0 +1,80 @@
+# EKS-specific overlay for kube-prometheus-stack
+# Differences from kind values.yaml:
+#   - Persistent storage enabled (kind had emptyDir or local-path)
+#   - Trimmed PVC sizes to fit our tight 2-node footprint
+#   - Resource requests sized for m7i-flex.large (2 vCPU / 8 GB nodes)
+#   - No nodeSelector — let scheduler place pods (we only have 2 nodes)
+
+defaultRules:
+  create: true
+
+# Prometheus
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+    resources:
+      requests:
+        cpu: 200m
+        memory: 800Mi
+      limits:
+        cpu: 1
+        memory: 1500Mi
+    # Discover ALL ServiceMonitors regardless of namespace label
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+
+# Alertmanager
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 200Mi
+
+# Grafana
+grafana:
+  adminPassword: "changeme-pulsehealth-demo"
+  persistence:
+    enabled: true
+    storageClassName: gp3
+    size: 2Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# Node exporter — DaemonSet, no PVC needed
+prometheusNodeExporter:
+  resources:
+    requests:
+      cpu: 30m
+      memory: 32Mi
+
+# kube-state-metrics
+kubeStateMetrics:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi

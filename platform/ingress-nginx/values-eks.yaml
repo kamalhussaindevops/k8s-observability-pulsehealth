@@ -2,10 +2,10 @@
 # Differences from values.yaml (kind):
 #   - Deployment instead of DaemonSet (traffic enters via LB, not hostPort)
 #   - 2 replicas for HA across 2 AZs
-#   - Service type LoadBalancer with NLB annotations (cheaper + faster than CLB)
+#   - Service type LoadBalancer with NLB annotations
 #   - No nodeSelector/tolerations: any worker node is fine
 #   - Admission webhooks ENABLED (kind workaround not needed here)
-#   - Explicit resource requests to play nicely on a tight 2-node cluster
+#   - Explicit resource requests for the tight 2-node cluster
 
 controller:
   kind: Deployment
@@ -14,13 +14,10 @@ controller:
   service:
     type: LoadBalancer
     annotations:
-      # Use AWS NLB via the in-tree cloud-controller-manager integration
-      # (avoids installing AWS Load Balancer Controller for this case study)
       service.beta.kubernetes.io/aws-load-balancer-type: nlb
       service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
       service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
 
-  # Spread replicas across nodes/AZs
   topologySpreadConstraints:
     - maxSkew: 1
       topologyKey: topology.kubernetes.io/zone
@@ -38,12 +35,9 @@ controller:
       cpu: 500m
       memory: 256Mi
 
-  # Webhooks ENABLED (we want admission validation on EKS)
   admissionWebhooks:
     enabled: true
 
-  # CRITICAL: same as kind — Prometheus must scrape this
-  # The release label must match kube-prometheus-stack's serviceMonitorSelector
   metrics:
     enabled: true
     serviceMonitor:
