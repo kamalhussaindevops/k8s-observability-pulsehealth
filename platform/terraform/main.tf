@@ -42,6 +42,9 @@ module "eks" {
     kube-proxy             = {}
     vpc-cni                = {}
     eks-pod-identity-agent = {}
+    aws-ebs-csi-driver = {
+      service_account_role_arn = module.ebs_csi_driver_irsa.iam_role_arn
+    }
   }
 
   vpc_id     = module.vpc.vpc_id
@@ -58,6 +61,26 @@ module "eks" {
       labels = {
         workload-tier = "platform"
       }
+    }
+  }
+}
+
+# IRSA role for EBS CSI driver controller.
+# The driver's controller pods (kube-system:ebs-csi-controller-sa) assume this
+# role via the cluster's OIDC provider, granting them EC2 API permissions
+# (CreateVolume, AttachVolume, DescribeVolumes, etc.) to provision EBS volumes
+# in response to PersistentVolumeClaims.
+module "ebs_csi_driver_irsa" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  version = "~> 5.0"
+
+  role_name             = "${var.cluster_name}-ebs-csi-driver"
+  attach_ebs_csi_policy = true
+
+  oidc_providers = {
+    main = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["kube-system:ebs-csi-controller-sa"]
     }
   }
 }

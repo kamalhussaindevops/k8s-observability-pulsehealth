@@ -1,4 +1,6 @@
 controller:
+  admissionWebhooks:
+      enabled: false
   # Pin to the kind control-plane node (which has ingress-ready=true label and
   # port 80/443 mapped to the host in kind/cluster-config.yaml)
   nodeSelector:
