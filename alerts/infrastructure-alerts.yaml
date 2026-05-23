@@ -1,0 +1,185 @@
+# Core infrastructure alerts
+#
+# These complement the SLO alerts (which are user-facing) with
+# system-level signals that catch problems BEFORE they affect users.
+#
+# Philosophy: page on user impact (SLO alerts), ticket on operational risk
+# (these alerts). A pod restart loop isn't user-facing yet, but is a
+# leading indicator.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: pulsehealth-infrastructure
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+    app.kubernetes.io/component: infrastructure
+spec:
+  groups:
+    # ─── Pod-level alerts ─────────────────────────────────────────────────
+    - name: pulsehealth.pods
+      rules:
+        - alert: PulseHealthPodCrashLooping
+          expr: |
+            rate(kube_pod_container_status_restarts_total{
+              namespace=~"online-boutique|monitoring|ingress-nginx"
+            }[15m]) * 60 * 5 > 0
+          for: 15m
+          labels:
+            severity: warning
+            category: pod-health
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is restarting"
+            description: |
+              {{ $labels.namespace }}/{{ $labels.pod }} restarted within the
+              last 15m. Likely candidates: OOMKill (check exit code 137),
+              failing liveness probe, or crash on startup.
+
+        - alert: PulseHealthPodNotReady
+          expr: |
+            sum by (namespace, pod) (
+              kube_pod_status_phase{phase=~"Pending|Unknown|Failed"}
+            ) > 0
+          for: 10m
+          labels:
+            severity: warning
+            category: pod-health
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} not Ready"
+            description: |
+              Pod has been in a non-Ready state for 10+ minutes. Check events
+              with `kubectl describe pod -n {{ $labels.namespace }} {{ $labels.pod }}`.
+
+        # OOMKilled — special case worth its own alert, easier to action than
+        # generic CrashLooping because the fix is "increase memory limit"
+        - alert: PulseHealthPodOOMKilled
+          expr: |
+            increase(kube_pod_container_status_last_terminated_reason{
+              reason="OOMKilled"
+            }[10m]) > 0
+          for: 1m
+          labels:
+            severity: warning
+            category: pod-health
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} was OOMKilled"
+            description: |
+              Container exit code 137 = SIGKILL from the kernel due to OOM.
+              Action: bump the container's memory limit. This bit us with
+              Grafana early in the project; see LESSONS.md #3.
+
+    # ─── Node-level alerts ────────────────────────────────────────────────
+    - name: pulsehealth.nodes
+      rules:
+        - alert: PulseHealthNodeNotReady
+          expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            category: node-health
+          annotations:
+            summary: "Node {{ $labels.node }} NotReady for 5+ minutes"
+            description: |
+              Workloads on this node may already be migrating. Verify with
+              `kubectl describe node {{ $labels.node }}` and check the AWS
+              EC2 console for the underlying instance status.
+
+        - alert: PulseHealthNodeHighMemoryPressure
+          expr: |
+            (
+              node_memory_MemAvailable_bytes
+              / node_memory_MemTotal_bytes
+            ) < 0.10
+          for: 10m
+          labels:
+            severity: warning
+            category: node-health
+          annotations:
+            summary: "Node {{ $labels.instance }} memory pressure (<10% free)"
+            description: |
+              Less than 10% memory available for 10+ minutes. Risk of OOM
+              kills imminent. Consider scaling the node group.
+
+        - alert: PulseHealthNodeHighCPULoad
+          expr: |
+            (
+              1 - rate(node_cpu_seconds_total{mode="idle"}[5m])
+            ) > 0.90
+          for: 15m
+          labels:
+            severity: warning
+            category: node-health
+          annotations:
+            summary: "Node {{ $labels.instance }} CPU >90% for 15m"
+            description: |
+              Sustained CPU saturation. Workloads may be experiencing
+              throttling or queue buildup.
+
+    # ─── Storage alerts ───────────────────────────────────────────────────
+    - name: pulsehealth.storage
+      rules:
+        - alert: PulseHealthPVCNearFull
+          expr: |
+            (
+              kubelet_volume_stats_used_bytes
+              / kubelet_volume_stats_capacity_bytes
+            ) > 0.85
+          for: 10m
+          labels:
+            severity: warning
+            category: storage
+          annotations:
+            summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} >85% full"
+            description: |
+              Persistent volume usage is at {{ printf "%.1f" (mul $value 100) }}%.
+              Expand with `kubectl edit pvc` (gp3 supports online expansion) or
+              clean up old data. Prometheus retention reduction is one fast lever.
+
+        - alert: PulseHealthPVCNearlyFull
+          expr: |
+            (
+              kubelet_volume_stats_used_bytes
+              / kubelet_volume_stats_capacity_bytes
+            ) > 0.95
+          for: 5m
+          labels:
+            severity: critical
+            category: storage
+          annotations:
+            summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} >95% FULL"
+            description: |
+              Volume will be full within hours at current write rate.
+              Immediate action required.
+
+    # ─── Ingress controller alerts ────────────────────────────────────────
+    - name: pulsehealth.ingress
+      rules:
+        - alert: PulseHealthIngressControllerDown
+          expr: |
+            absent(nginx_ingress_controller_requests) == 1
+            or
+            sum(up{job="ingress-nginx-controller"}) < 1
+          for: 5m
+          labels:
+            severity: critical
+            category: ingress
+          annotations:
+            summary: "ingress-nginx controller is not exposing metrics or is down"
+            description: |
+              Prometheus cannot scrape the ingress-nginx controller. Either
+              the controller is down, the ServiceMonitor selector doesn't
+              match, or networking between Prometheus and the controller pods
+              is broken.
+
+        - alert: PulseHealthIngressConfigReloadFailure
+          expr: increase(nginx_ingress_controller_config_last_reload_successful[10m]) == 0
+          for: 10m
+          labels:
+            severity: warning
+            category: ingress
+          annotations:
+            summary: "ingress-nginx hasn't reloaded config successfully in 10m"
+            description: |
+              The controller is running but config reloads are failing. New
+              Ingress resources won't take effect. Check controller logs.

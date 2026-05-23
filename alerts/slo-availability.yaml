@@ -1,0 +1,127 @@
+# SLO: Ingress Availability
+#
+# Service Level Indicator (SLI):
+#   ratio of non-5xx responses to total responses through ingress-nginx
+#
+# Service Level Objective (SLO):
+#   99.0% over rolling 30-day window
+#
+# Error budget:
+#   1% of total requests in 30d → if we get 1M req/30d, budget = 10k errors
+#
+# Alerting strategy:
+#   Multi-burn-rate alerts per Google SRE Workbook ch. 5.
+#   Two windows (fast/slow) catch both acute outages and slow burn.
+#
+#     Fast alert:  burn rate 14.4× over 1h     → 2% budget used in 1h     → page
+#     Slow alert:  burn rate  6×   over 6h     → 5% budget used in 6h     → ticket
+#
+# See: https://sre.google/workbook/alerting-on-slos/
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: pulsehealth-slo-availability
+  namespace: monitoring
+  labels:
+    # Required for kube-prometheus-stack's Prometheus to discover this rule
+    release: kube-prometheus-stack
+    app.kubernetes.io/component: slo
+    pulsehealth.io/slo: availability
+spec:
+  groups:
+    # ─── Recording rules ──────────────────────────────────────────────────
+    # Pre-compute SLI ratios at multiple window sizes. Querying these
+    # in dashboards is fast and cheap vs. computing rates ad-hoc.
+    - name: pulsehealth.slo.availability.records
+      interval: 30s
+      rules:
+        - record: slo:ingress_availability_ratio:5m
+          expr: |
+            sum(rate(nginx_ingress_controller_requests{status!~"5.."}[5m]))
+            /
+            sum(rate(nginx_ingress_controller_requests[5m]))
+
+        - record: slo:ingress_availability_ratio:1h
+          expr: |
+            sum(rate(nginx_ingress_controller_requests{status!~"5.."}[1h]))
+            /
+            sum(rate(nginx_ingress_controller_requests[1h]))
+
+        - record: slo:ingress_availability_ratio:6h
+          expr: |
+            sum(rate(nginx_ingress_controller_requests{status!~"5.."}[6h]))
+            /
+            sum(rate(nginx_ingress_controller_requests[6h]))
+
+        - record: slo:ingress_availability_ratio:30d
+          expr: |
+            sum(rate(nginx_ingress_controller_requests{status!~"5.."}[30d]))
+            /
+            sum(rate(nginx_ingress_controller_requests[30d]))
+
+        # Error budget remaining as a fraction of total budget
+        # SLO=0.99 means budget=0.01. budget_remaining = (sli - 0.99) / 0.01
+        - record: slo:ingress_availability_budget_remaining:30d
+          expr: |
+            clamp_max(
+              clamp_min(
+                (slo:ingress_availability_ratio:30d - 0.99) / 0.01,
+                0
+              ),
+              1
+            )
+
+    # ─── Burn rate alerts ─────────────────────────────────────────────────
+    - name: pulsehealth.slo.availability.alerts
+      rules:
+        # Fast burn: 2% of budget burned in 1h → page (critical)
+        - alert: PulseHealthIngressAvailabilityFastBurn
+          expr: |
+            (1 - slo:ingress_availability_ratio:5m) > (14.4 * 0.01)
+            and
+            (1 - slo:ingress_availability_ratio:1h) > (14.4 * 0.01)
+          for: 2m
+          labels:
+            severity: critical
+            slo: ingress-availability
+            burn_rate: fast
+          annotations:
+            summary: "Ingress availability burning budget fast (>14.4x)"
+            description: |
+              Ingress error rate is high enough to exhaust the entire 30-day
+              error budget in ~2 days if it continues. Current 1h SLI:
+              {{ printf "%.4f" $value }}.
+            runbook_url: https://github.com/kamalhussaindevops/k8s-observability-pulsehealth/blob/main/DESTROY-RUNBOOK.md
+
+        # Slow burn: 5% of budget burned in 6h → ticket (warning)
+        - alert: PulseHealthIngressAvailabilitySlowBurn
+          expr: |
+            (1 - slo:ingress_availability_ratio:1h) > (6 * 0.01)
+            and
+            (1 - slo:ingress_availability_ratio:6h) > (6 * 0.01)
+          for: 15m
+          labels:
+            severity: warning
+            slo: ingress-availability
+            burn_rate: slow
+          annotations:
+            summary: "Ingress availability burning budget steadily (>6x)"
+            description: |
+              Sustained elevated error rate. At current pace the 30-day error
+              budget would be exhausted in ~5 days. Current 6h SLI:
+              {{ printf "%.4f" $value }}.
+
+        # Budget low — informational ticket, no SLI violation needed
+        - alert: PulseHealthIngressAvailabilityBudgetLow
+          expr: slo:ingress_availability_budget_remaining:30d < 0.25
+          for: 1h
+          labels:
+            severity: info
+            slo: ingress-availability
+          annotations:
+            summary: "Ingress availability error budget below 25%"
+            description: |
+              Only {{ printf "%.1f" (mul $value 100) }}% of the 30-day error
+              budget remains. Review recent incidents and consider freezing
+              risky changes until the next budget rollover.

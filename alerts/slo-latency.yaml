@@ -1,0 +1,132 @@
+# SLO: Ingress Latency
+#
+# Service Level Indicator (SLI):
+#   p99 latency of HTTP responses through ingress-nginx (excluding 5xx,
+#   since those usually fail fast and would skew p99 low if included)
+#
+# Service Level Objective (SLO):
+#   p99 < 250ms for 99% of 1-minute windows over rolling 30 days
+#   (i.e., we tolerate p99 > 250ms for up to ~7 hours per 30 days)
+#
+# Why p99 not avg:
+#   Averages hide tail latency. p99 surfaces the experience of the
+#   slowest 1% of users, which is what matters for SLO contracts.
+#
+# Why exclude 5xx:
+#   5xx responses are usually fast (server gave up early). Including
+#   them biases p99 downward and masks real latency problems.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: pulsehealth-slo-latency
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+    app.kubernetes.io/component: slo
+    pulsehealth.io/slo: latency
+spec:
+  groups:
+    # ─── Recording rules ──────────────────────────────────────────────────
+    - name: pulsehealth.slo.latency.records
+      interval: 30s
+      rules:
+        # p99 latency, rolling 5m, excluding 5xx
+        - record: slo:ingress_latency_p99_seconds:5m
+          expr: |
+            histogram_quantile(
+              0.99,
+              sum by (le) (
+                rate(
+                  nginx_ingress_controller_request_duration_seconds_bucket{
+                    status!~"5.."
+                  }[5m]
+                )
+              )
+            )
+
+        # p99 latency, rolling 1h
+        - record: slo:ingress_latency_p99_seconds:1h
+          expr: |
+            histogram_quantile(
+              0.99,
+              sum by (le) (
+                rate(
+                  nginx_ingress_controller_request_duration_seconds_bucket{
+                    status!~"5.."
+                  }[1h]
+                )
+              )
+            )
+
+        # p50 latency for context (not part of SLO, just nice on dashboards)
+        - record: slo:ingress_latency_p50_seconds:5m
+          expr: |
+            histogram_quantile(
+              0.50,
+              sum by (le) (
+                rate(
+                  nginx_ingress_controller_request_duration_seconds_bucket{
+                    status!~"5.."
+                  }[5m]
+                )
+              )
+            )
+
+        # Per-ingress p99 (for routing-aware dashboards)
+        - record: slo:ingress_latency_p99_seconds:per_ingress:5m
+          expr: |
+            histogram_quantile(
+              0.99,
+              sum by (ingress, le) (
+                rate(
+                  nginx_ingress_controller_request_duration_seconds_bucket{
+                    status!~"5.."
+                  }[5m]
+                )
+              )
+            )
+
+    # ─── Alerts ───────────────────────────────────────────────────────────
+    - name: pulsehealth.slo.latency.alerts
+      rules:
+        # Critical: p99 > 1s sustained → page
+        # 4x the SLO target means real users are visibly affected
+        - alert: PulseHealthIngressLatencyCritical
+          expr: slo:ingress_latency_p99_seconds:5m > 1.0
+          for: 5m
+          labels:
+            severity: critical
+            slo: ingress-latency
+          annotations:
+            summary: "Ingress p99 latency exceeds 1s for 5+ minutes"
+            description: |
+              p99 latency is {{ printf "%.3f" $value }}s, 4x the SLO target
+              of 250ms. Users are seeing slow page loads.
+
+        # Warning: p99 > 250ms (SLO violation) for 15+ minutes
+        - alert: PulseHealthIngressLatencyHigh
+          expr: slo:ingress_latency_p99_seconds:5m > 0.25
+          for: 15m
+          labels:
+            severity: warning
+            slo: ingress-latency
+          annotations:
+            summary: "Ingress p99 latency violates SLO (>250ms)"
+            description: |
+              p99 latency is {{ printf "%.3f" $value }}s, above the 250ms SLO.
+              If sustained, this burns the latency error budget.
+
+        # Per-ingress alert — catches problems isolated to one app
+        - alert: PulseHealthPerIngressLatencyHigh
+          expr: slo:ingress_latency_p99_seconds:per_ingress:5m > 0.5
+          for: 10m
+          labels:
+            severity: warning
+            slo: ingress-latency
+          annotations:
+            summary: "Ingress {{ $labels.ingress }} p99 latency >500ms"
+            description: |
+              The ingress {{ $labels.ingress }} has p99 = {{ printf "%.3f" $value }}s.
+              Investigate that specific service (likely DB, downstream, or
+              gRPC backpressure issue).
