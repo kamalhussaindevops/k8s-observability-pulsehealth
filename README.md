@@ -105,6 +105,41 @@ terraform destroy
 | Observability | kube-prometheus-stack (Helm) | Prometheus, Alertmanager, Grafana, node-exporter, kube-state-metrics |
 | Demo workload | Online Boutique (12 microservices) | Polyglot, gRPC-heavy, real traffic generator |
 
+## Proof artifacts
+
+Four representative captures (click any to open full size). For the complete set of 11 captures with descriptions, see [`docs/screenshots/`](docs/screenshots/).
+
+<table>
+  <tr>
+    <td width="50%">
+      <a href="docs/screenshots/03-aws-console-eks-cluster.png">
+        <img src="docs/screenshots/03-aws-console-eks-cluster.png" alt="AWS Console showing EKS cluster active">
+      </a>
+      <p align="center"><em>AWS Console: EKS cluster <code>pulsehealth</code> active in ap-south-1</em></p>
+    </td>
+    <td width="50%">
+      <a href="docs/screenshots/04b-aws-console-nlb-detail.png">
+        <img src="docs/screenshots/04b-aws-console-nlb-detail.png" alt="AWS NLB detail with multi-AZ listeners">
+      </a>
+      <p align="center"><em>AWS Network Load Balancer: internet-facing, multi-AZ</em></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="docs/screenshots/07-grafana-persistent-volumes.png">
+        <img src="docs/screenshots/07-grafana-persistent-volumes.png" alt="Grafana Kubernetes Persistent Volumes dashboard">
+      </a>
+      <p align="center"><em>EBS-backed gp3 PVCs (encrypted) for Prometheus / Alertmanager / Grafana</em></p>
+    </td>
+    <td width="50%">
+      <a href="docs/screenshots/09-grafana-online-boutique.png">
+        <img src="docs/screenshots/09-grafana-online-boutique.png" alt="Online Boutique workloads observability">
+      </a>
+      <p align="center"><em>Per-microservice observability for all 12 Online Boutique services</em></p>
+    </td>
+  </tr>
+</table>
+
 ## License
 
 See `LICENSE`.
