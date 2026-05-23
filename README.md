@@ -5,6 +5,12 @@
 [![Helm](https://img.shields.io/badge/Helm-Charts-0F1689?logo=helm)](https://helm.sh)
 [![Prometheus](https://img.shields.io/badge/Prometheus-kube--prometheus--stack-E6522C?logo=prometheus)](https://prometheus.io)
 
+![Grafana NGINX dashboard showing 96.7% success rate on EKS](docs/screenshots/05-grafana-nginx-ingress-dashboard.png)
+*Live ingress-nginx observability on EKS — 96.7% success rate, p50=3ms / p90=9ms / p99=44ms under load*
+
+![Online Boutique homepage served via AWS Network Load Balancer](docs/screenshots/01-online-boutique-homepage.png)
+*Online Boutique microservices demo served publicly via AWS NLB → ingress-nginx → frontend Service*
+
 Production-grade observability stack deployed on AWS EKS. Terraform for infrastructure, Helm for workloads, kube-prometheus-stack for metrics, ingress-nginx behind an AWS Network Load Balancer for public traffic. Tested end-to-end with live SLI metrics (96.7% success rate, sub-50ms p99 latency under load).
 
 > **Built and torn down in ~19 hours of cluster runtime, for ~$6.50 of AWS spend.** Captured 11 proof screenshots; documented 7 production-relevant lessons in `LESSONS.md`.
