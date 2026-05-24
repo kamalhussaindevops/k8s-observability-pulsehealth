@@ -13,6 +13,14 @@
 
 Production-grade observability stack deployed on AWS EKS. Terraform for infrastructure, Helm for workloads, kube-prometheus-stack for metrics, ingress-nginx behind an AWS Network Load Balancer for public traffic. Tested end-to-end with live SLI metrics (96.7% success rate, sub-50ms p99 latency under load).
 
+## 📄 Full case study
+
+Read the complete case study (architecture, SLOs, implementation, lessons learned, cost analysis):
+
+**[PulseHealth-Case-Study-v1.pdf](docs/PulseHealth-Case-Study-v1.pdf)**
+
+12-page PDF covering the full engagement narrative. The repo below contains the working code and artifacts.
+
 > **Built and torn down in ~19 hours of cluster runtime, for ~$6.50 of AWS spend.** Captured 11 proof screenshots; documented 7 production-relevant lessons in `LESSONS.md`.
 
 ## What's inside
